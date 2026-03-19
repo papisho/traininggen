@@ -1,0 +1,612 @@
+import { useState, useEffect } from “react”;
+
+const STORAGE_KEY = “newriver_sessions_v2”;
+const API_KEY_STORAGE = “newriver_api_key”;
+
+const focusOptions = [
+{ val: “Attacking”, emoji: “⚔️”, label: “Attacking / Finishing” },
+{ val: “Defending”, emoji: “🛡”, label: “Defending / Pressing” },
+{ val: “Possession”, emoji: “🔄”, label: “Possession / Build-up” },
+{ val: “Transition”, emoji: “⚡”, label: “Transition” },
+];
+const diffOptions = [{ val: “Easy”, emoji: “🟢” }, { val: “Medium”, emoji: “🟡” }, { val: “Hard”, emoji: “🔴” }];
+const formations = [“3-3-2 (9v9)”,“4-3-1 (9v9)”,“3-2-3 (9v9)”,“4-3-3 (11v11)”,“4-2-3-1 (11v11)”,“3-5-2 (11v11)”,“4-4-2 (11v11)”];
+const skillLevels = [“Beginner”,“Developing”,“Competitive”,“Elite”];
+const trainingPhases = [“Pre-Season”,“Early Season”,“Mid-Season”,“Late Season”,“Tournament Week”];
+const loadMsgs = [“Warming up the drills…”,“Picking the right exercises…”,“Building your session plan…”,“Writing your pre-session form…”,“Adding coaching cues…”,“Almost ready…”];
+const focusStyle = {
+Attacking: { bg:”#fef2f2”, border:”#fca5a5”, color:”#991b1b” },
+Defending:  { bg:”#eff6ff”, border:”#93c5fd”, color:”#1e40af” },
+Possession: { bg:”#fefce8”, border:”#fde047”, color:”#713f12” },
+Transition: { bg:”#faf5ff”, border:”#c4b5fd”, color:”#4c1d95” },
+};
+const borderColors = { warm:”#f6ad55”, tech:”#63b3ed”, game:”#fc8181”, scrim:”#b794f4”, cool:”#f6ad55” };
+
+export default function App() {
+const [view, setView] = useState(“form”);
+const [activeTab, setActiveTab] = useState(“plan”);
+const [apiKey, setApiKey] = useState(””);
+const [apiKeyInput, setApiKeyInput] = useState(””);
+const [apiKeyVisible, setApiKeyVisible] = useState(false);
+const [loadMsg, setLoadMsg] = useState(loadMsgs[0]);
+const [plan, setPlan] = useState(null);
+const [preForm, setPreForm] = useState(null);
+const [savedSessions, setSavedSessions] = useState([]);
+const [error, setError] = useState(””);
+
+// Form fields
+const today = new Date().toISOString().split(“T”)[0];
+const [fCoach, setFCoach] = useState(””);
+const [fDate, setFDate] = useState(today);
+const [fLocation, setFLocation] = useState(“Marching Virginians Field B Half”);
+const [fSessionNum, setFSessionNum] = useState(“1”);
+const [fPhase, setFPhase] = useState(“Mid-Season”);
+const [fTopic, setFTopic] = useState(””);
+const [fDuration, setFDuration] = useState(“75”);
+const [fDaysToGame, setFDaysToGame] = useState(“2”);
+const [fAge, setFAge] = useState(“U11”);
+const [fPlayers, setFPlayers] = useState(“12”);
+const [fFormation, setFFormation] = useState(formations[0]);
+const [fSkill, setFSkill] = useState(“Developing”);
+const [fFocus, setFFocus] = useState(“Attacking”);
+const [fDiff, setFDiff] = useState(“Medium”);
+const [fNotes, setFNotes] = useState(””);
+
+useEffect(() => {
+const k = localStorage.getItem(API_KEY_STORAGE) || “”;
+setApiKey(k); setApiKeyInput(k);
+const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || “[]”);
+setSavedSessions(s);
+if (!k) setView(“apikey”);
+}, []);
+
+useEffect(() => {
+if (view !== “loading”) return;
+let i = 0;
+const iv = setInterval(() => { i = (i+1) % loadMsgs.length; setLoadMsg(loadMsgs[i]); }, 1800);
+return () => clearInterval(iv);
+}, [view]);
+
+function saveApiKey() {
+if (!apiKeyInput.trim().startsWith(“sk-”)) { setError(“Key should start with ‘sk-’. Please check and try again.”); return; }
+localStorage.setItem(API_KEY_STORAGE, apiKeyInput.trim());
+setApiKey(apiKeyInput.trim()); setError(””); setView(“form”);
+}
+
+function persistSession(planData, preFormData, meta) {
+const entry = { id: Date.now(), date: meta.date, age: meta.age, focus: meta.focus, coach: meta.coach, title: planData.sessionTitle, plan: planData, meta };
+const updated = [entry, …savedSessions].slice(0, 20);
+setSavedSessions(updated);
+localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+}
+
+async function generate() {
+if (!apiKey) { setView(“apikey”); return; }
+setError(””);
+const meta = { coach:fCoach, date:fDate, location:fLocation, sessionNum:fSessionNum, phase:fPhase, topic:fTopic, duration:fDuration, daysToGame:fDaysToGame, age:fAge, players:fPlayers, formation:fFormation, skill:fSkill, focus:fFocus, diff:fDiff, notes:fNotes };
+setView(“loading”);
+
+```
+const prompt = `You are an expert youth soccer coach (UEFA/USSF highest license). Generate a complete training session AND a completed pre-session planning form as strict JSON.
+```
+
+Session details:
+
+- Coach: ${fCoach || “Not specified”}
+- Date: ${fDate}
+- Location: ${fLocation}
+- Session number this week: ${fSessionNum} of 3
+- Training phase: ${fPhase}
+- Session topic: ${fTopic || “Not specified — derive from focus”}
+- Duration: ${fDuration} minutes
+- Days until next game: ${fDaysToGame}
+- Age group: ${fAge}
+- Number of players: ${fPlayers}
+- Formation: ${fFormation}
+- Skill level: ${fSkill}
+- Primary focus: ${fFocus}
+- Drill difficulty: ${fDiff}
+- Extra notes: ${fNotes || “None”}
+
+Club context — Newriver United Soccer:
+
+- Developmental curriculum focused on improving technical and tactical abilities of the individual within a team setting
+- Structured environment where training feeds into match application
+- No rigid game model — sessions should reflect individual development first, team application second
+
+Rules for session plan:
+
+- ${fDuration}-min plan: warm-up → 2-3 technical drills → 1 game-like activity → scrimmage (if days to game ≥ 2) → cool-down
+- If days to game is 1, make it light — mostly scrimmage
+- All drills relate to: ${fFocus}
+- Match age group ${fAge} and skill level ${fSkill}
+- For video links use only these URLs (pick most relevant):
+  https://www.soccercoachlab.com/soccer-drills-category/${fAge.toLowerCase()}
+  https://www.soccercoachlab.com/soccer-drills-theme/technique
+  https://www.soccerdrive.com/soccer-drills/age-level/${fAge.toLowerCase()}
+  https://mojo.sport/coachs-corner/10-best-${fAge.toLowerCase()}-soccer-drills/
+  https://soccerxpert.com/drills/age/${fAge.toLowerCase()}
+  https://quickstartsoccer.com/soccer-finishing-drills/
+
+Respond ONLY with valid JSON, no markdown, no extra text. Use this exact structure:
+{
+“sessionPlan”: {
+“sessionTitle”: “string”,
+“metaPills”: [“string”],
+“coachNote”: “string”,
+“timeline”: [{“time”: “0-8”, “label”: “Warm-Up”}],
+“sections”: [
+{
+“title”: “🌡 Warm-Up”,
+“type”: “warm”,
+“drills”: [
+{
+“name”: “string”,
+“time”: “0–8 min”,
+“description”: “string (specific: dimensions, rotations, rules)”,
+“coachingPoints”: [“string”,“string”,“string”],
+“videoUrl”: “string”,
+“videoLabel”: “string”
+}
+]
+}
+]
+},
+“preSessionForm”: {
+“sessionTopic”: “string”,
+“trainingObjective”: “string (2-3 sentences)”,
+“keyPrinciples”: {
+“attackingDefendingPrinciple”: “string”,
+“subPrinciples”: [“string”,“string”],
+“playerActions”: [“string”,“string”,“string”]
+},
+“playerLearningGoals”: [“string”,“string”,“string”],
+“plannedActivities”: [
+{“name”: “string”, “description”: “string (1-2 sentences)”}
+],
+“coachingCues”: [“string”,“string”,“string”],
+“anticipatedChallenges”: “string (2-3 sentences covering player needs, numbers, ability adaptations, and expected challenges)”,
+“clubValuesReflection”: “string (2-3 sentences tying session to Newriver United developmental curriculum)”
+}
+}
+Section types: warm, tech, game, scrim, cool. Generate 5-7 total drills.`;
+
+```
+try {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "API error");
+  const raw = data.content.map(b => b.text||"").join("").trim().replace(/```json|```/g,"").trim();
+  const parsed = JSON.parse(raw);
+  persistSession(parsed.sessionPlan, parsed.preSessionForm, meta);
+  setPlan(parsed.sessionPlan);
+  setPreForm({ ...parsed.preSessionForm, coach: fCoach, date: fDate, location: fLocation, age: fAge, phase: fPhase, formation: fFormation });
+  setActiveTab("plan");
+  setView("result");
+} catch (err) {
+  setError(err.message);
+  setView("form");
+}
+```
+
+}
+
+// ── API KEY VIEW ──
+if (view === “apikey”) return (
+<div style={S.page}>
+<Header savedCount={savedSessions.length} onSaved={()=>setView(“saved”)} onKey={()=>setView(“apikey”)} />
+<div style={S.wrap}>
+<div style={S.card}>
+<div style={{fontSize:“2rem”,textAlign:“center”,marginBottom:12}}>🔑</div>
+<h2 style={S.cardTitle}>Enter Your Anthropic API Key</h2>
+<p style={{fontSize:“0.84rem”,color:”#6b7280”,marginBottom:16,lineHeight:1.6}}>
+Saved only on this device, never shared.{” “}
+<a href=“https://console.anthropic.com” target=”_blank” style={{color:”#1a472a”,fontWeight:700}}>Get a free key at console.anthropic.com</a>
+</p>
+<div style={{position:“relative”,marginBottom:12}}>
+<input type={apiKeyVisible?“text”:“password”} value={apiKeyInput} onChange={e=>setApiKeyInput(e.target.value)}
+placeholder=“sk-ant-…” style={{…S.input,paddingRight:44,fontFamily:“monospace”,fontSize:“0.85rem”}} />
+<button onClick={()=>setApiKeyVisible(v=>!v)} style={{position:“absolute”,right:10,top:“50%”,transform:“translateY(-50%)”,background:“none”,border:“none”,cursor:“pointer”,fontSize:“1.1rem”}}>
+{apiKeyVisible?“🙈”:“👁”}
+</button>
+</div>
+{error && <div style={S.errorBox}>{error}</div>}
+<button onClick={saveApiKey} style={S.btnPrimary}>Save & Continue</button>
+{apiKey && <button onClick={()=>setView(“form”)} style={{…S.btnSecondary,marginTop:8,width:“100%”}}>Cancel</button>}
+</div>
+</div>
+</div>
+);
+
+// ── LOADING VIEW ──
+if (view === “loading”) return (
+<div style={S.page}>
+<Header savedCount={savedSessions.length} onSaved={()=>{}} onKey={()=>{}} />
+<div style={{textAlign:“center”,padding:“60px 24px”}}>
+<div style={S.spinner} />
+<p style={{color:”#6b7280”,fontSize:“1rem”,marginTop:20}}>{loadMsg}</p>
+</div>
+</div>
+);
+
+// ── SAVED VIEW ──
+if (view === “saved”) return (
+<div style={S.page}>
+<Header savedCount={savedSessions.length} onSaved={()=>setView(“saved”)} onKey={()=>setView(“apikey”)} />
+<div style={S.wrap}>
+<div style={{display:“flex”,justifyContent:“space-between”,alignItems:“center”,marginBottom:16}}>
+<h2 style={{fontSize:“1.1rem”,fontWeight:800}}>📂 Saved Sessions</h2>
+<button onClick={()=>setView(“form”)} style={S.btnSecondary}>← Back</button>
+</div>
+{savedSessions.length === 0 && (
+<div style={{…S.card,textAlign:“center”,color:”#9ca3af”,padding:40}}>No saved sessions yet.</div>
+)}
+{savedSessions.map(s => {
+const fs = focusStyle[s.focus] || focusStyle.Attacking;
+return (
+<div key={s.id} style={{...S.card,marginBottom:12}}>
+<div style={{display:“flex”,justifyContent:“space-between”,gap:8}}>
+<div style={{flex:1}}>
+<div style={{fontWeight:700,fontSize:“0.95rem”,marginBottom:6}}>{s.title}</div>
+<div style={{display:“flex”,flexWrap:“wrap”,gap:6,marginBottom:10}}>
+<span style={{…S.badge,background:”#f3f4f6”,color:”#374151”}}>📅 {s.date}</span>
+<span style={{…S.badge,background:”#f3f4f6”,color:”#374151”}}>👥 {s.age}</span>
+{s.coach && <span style={{…S.badge,background:”#f3f4f6”,color:”#374151”}}>🧑‍🏫 {s.coach}</span>}
+<span style={{…S.badge,background:fs.bg,color:fs.color,border:`1px solid ${fs.border}`}}>{s.focus}</span>
+</div>
+</div>
+<button onClick={()=>{ const u=[…savedSessions].filter(x=>x.id!==s.id); setSavedSessions(u); localStorage.setItem(STORAGE_KEY,JSON.stringify(u)); }}
+style={{background:“none”,border:“none”,cursor:“pointer”,color:”#ef4444”,fontSize:“1.1rem”,padding:4}}>🗑</button>
+</div>
+<button onClick={()=>{ setPlan(s.plan); setPreForm(null); setActiveTab(“plan”); setView(“result”); }} style={S.btnPrimary}>
+View Session →
+</button>
+</div>
+);
+})}
+</div>
+</div>
+);
+
+// ── RESULT VIEW ──
+if (view === “result” && plan) return (
+<div style={S.page}>
+<Header savedCount={savedSessions.length} onSaved={()=>setView(“saved”)} onKey={()=>setView(“apikey”)} />
+<div style={S.wrap}>
+<div style={{display:“flex”,gap:10,marginBottom:16,flexWrap:“wrap”}}>
+<button onClick={()=>setView(“form”)} style={S.btnSecondary}>← New Session</button>
+<button onClick={()=>window.print()} style={S.btnPrimary}>🖨 Print / Save PDF</button>
+</div>
+
+```
+    {/* Tabs */}
+    <div style={{display:"flex",background:"#fff",borderRadius:10,padding:4,marginBottom:20,boxShadow:S.shadow,gap:4}}>
+      {[["plan","📋 Session Plan"],["form","📄 Pre-Session Form"]].map(([t,l])=>(
+        <button key={t} onClick={()=>setActiveTab(t)} style={{
+          flex:1, padding:"10px 8px", border:"none", borderRadius:8, fontWeight:700, fontSize:"0.85rem", cursor:"pointer",
+          background: activeTab===t ? "#111" : "transparent",
+          color: activeTab===t ? "#fff" : "#6b7280",
+          transition:"all 0.15s"
+        }}>{l}</button>
+      ))}
+    </div>
+
+    {/* SESSION PLAN TAB */}
+    {activeTab === "plan" && (
+      <div>
+        <h2 style={{fontSize:"1.2rem",fontWeight:800,marginBottom:12}}>{plan.sessionTitle}</h2>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+          {(plan.metaPills||[]).map((p,i)=><span key={i} style={{...S.badge,background:"#e6f4ea",color:"#1a472a"}}>{p}</span>)}
+        </div>
+        {plan.coachNote && <div style={S.noteBox}><strong style={{display:"block",marginBottom:4}}>📋 Coach's Note</strong>{plan.coachNote}</div>}
+        {plan.timeline?.length > 0 && <>
+          <div style={S.secTitle}>⏱ Session at a Glance</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>
+            {plan.timeline.map((t,i)=>(
+              <div key={i} style={S.tlItem}>
+                <div style={{fontWeight:700,color:"#1a472a",fontSize:"0.72rem"}}>{t.time}</div>
+                <div style={{color:"#6b7280",fontSize:"0.7rem",marginTop:2}}>{t.label}</div>
+              </div>
+            ))}
+          </div>
+        </>}
+        {(plan.sections||[]).map((sec,si)=>(
+          <div key={si}>
+            <div style={S.secTitle}>{sec.title}</div>
+            {(sec.drills||[]).map((d,di)=>(
+              <div key={di} style={{...S.drillCard,borderLeftColor:borderColors[sec.type]||"#48bb78"}}>
+                <div style={{display:"flex",justifyContent:"space-between",gap:10,marginBottom:8}}>
+                  <div style={{fontWeight:700,fontSize:"0.95rem"}}>{d.name}</div>
+                  <div style={S.timeBadge}>{d.time}</div>
+                </div>
+                <p style={{fontSize:"0.84rem",color:"#4b5563",lineHeight:1.6,marginBottom:10}}>{d.description}</p>
+                {d.coachingPoints?.length > 0 && (
+                  <div style={S.cpBox}>
+                    <strong style={{display:"block",fontSize:"0.75rem",color:"#166534",marginBottom:4}}>🔑 Key Points</strong>
+                    <ul style={{paddingLeft:16}}>{d.coachingPoints.map((cp,ci)=><li key={ci} style={{fontSize:"0.78rem",color:"#15803d",lineHeight:1.6}}>{cp}</li>)}</ul>
+                  </div>
+                )}
+                {d.videoUrl && <a href={d.videoUrl} target="_blank" rel="noreferrer" style={S.vlink}>▶ {d.videoLabel||"Watch Video"}</a>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    )}
+
+    {/* PRE-SESSION FORM TAB */}
+    {activeTab === "form" && preForm && (
+      <div>
+        {/* Header block */}
+        <div style={{...S.card,borderTop:"4px solid #111",marginBottom:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}}>
+            <div>
+              <div style={{fontWeight:800,fontSize:"1.1rem",letterSpacing:0.5}}>NEWRIVER UNITED SOCCER</div>
+              <div style={{fontSize:"0.75rem",color:"#6b7280",letterSpacing:1,marginTop:2}}>PRE-SESSION PLANNING FORM</div>
+            </div>
+            <div style={{fontSize:"1.8rem"}}>⚽</div>
+          </div>
+          <div style={{borderTop:"1px solid #e5e7eb",marginTop:12,paddingTop:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 24px"}}>
+            {[
+              ["Coach", preForm.coach || "—"],
+              ["Team / Age Group", preForm.age],
+              ["Date", preForm.date],
+              ["Location", preForm.location],
+              ["Training Phase", preForm.phase],
+              ["Formation", preForm.formation],
+            ].map(([l,v])=>(
+              <div key={l}>
+                <div style={{fontSize:"0.68rem",fontWeight:700,color:"#9ca3af",textTransform:"uppercase",letterSpacing:0.5}}>{l}</div>
+                <div style={{fontSize:"0.85rem",fontWeight:600,color:"#111",marginTop:2}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <FormSection title="Session Topic / Title" icon="🏷">
+          <p style={S.formText}>{preForm.sessionTopic}</p>
+        </FormSection>
+
+        <FormSection title="Training Objective" icon="🎯">
+          <p style={S.formText}>{preForm.trainingObjective}</p>
+        </FormSection>
+
+        <FormSection title="Key Principles & Player Actions" icon="⚙️">
+          <div style={{marginBottom:10}}>
+            <div style={S.subLabel}>Attacking/Defending Principle</div>
+            <p style={S.formText}>{preForm.keyPrinciples?.attackingDefendingPrinciple}</p>
+          </div>
+          <div style={{marginBottom:10}}>
+            <div style={S.subLabel}>Sub-Principles</div>
+            <ul style={{paddingLeft:16}}>{(preForm.keyPrinciples?.subPrinciples||[]).map((s,i)=><li key={i} style={S.formText}>{s}</li>)}</ul>
+          </div>
+          <div>
+            <div style={S.subLabel}>Player Actions of Focus</div>
+            <ul style={{paddingLeft:16}}>{(preForm.keyPrinciples?.playerActions||[]).map((a,i)=><li key={i} style={S.formText}>{a}</li>)}</ul>
+          </div>
+        </FormSection>
+
+        <FormSection title="Player Learning Goals" icon="📈">
+          <ul style={{paddingLeft:16}}>{(preForm.playerLearningGoals||[]).map((g,i)=><li key={i} style={{...S.formText,marginBottom:4}}>{g}</li>)}</ul>
+        </FormSection>
+
+        <FormSection title="Planned Activities" icon="📋">
+          {(preForm.plannedActivities||[]).map((a,i)=>(
+            <div key={i} style={{marginBottom:10}}>
+              <div style={{fontWeight:700,fontSize:"0.84rem",color:"#111"}}>{i+1}. {a.name}</div>
+              <p style={{...S.formText,marginTop:2}}>{a.description}</p>
+            </div>
+          ))}
+        </FormSection>
+
+        <FormSection title="Coaching Cues / Interventions" icon="💬">
+          <ul style={{paddingLeft:16}}>{(preForm.coachingCues||[]).map((c,i)=><li key={i} style={{...S.formText,marginBottom:4}}>{c}</li>)}</ul>
+        </FormSection>
+
+        <FormSection title="Session Flow / Timing" icon="⏱">
+          {(plan.timeline||[]).map((t,i)=>(
+            <div key={i} style={{display:"flex",gap:12,marginBottom:4}}>
+              <span style={{fontWeight:700,fontSize:"0.82rem",color:"#111",minWidth:60}}>{t.time} min</span>
+              <span style={S.formText}>{t.label}</span>
+            </div>
+          ))}
+        </FormSection>
+
+        <FormSection title="Anticipated Challenges & Adaptations" icon="⚠️">
+          <p style={S.formText}>{preForm.anticipatedChallenges}</p>
+        </FormSection>
+
+        <FormSection title="Club Values & Game Model Reflection" icon="🏆">
+          <p style={S.formText}>{preForm.clubValuesReflection}</p>
+        </FormSection>
+      </div>
+    )}
+
+    {activeTab === "form" && !preForm && (
+      <div style={{...S.card,textAlign:"center",color:"#9ca3af",padding:40}}>
+        Pre-session form is only available for newly generated sessions.
+      </div>
+    )}
+  </div>
+</div>
+```
+
+);
+
+// ── FORM VIEW ──
+return (
+<div style={S.page}>
+<Header savedCount={savedSessions.length} onSaved={()=>setView(“saved”)} onKey={()=>setView(“apikey”)} />
+<div style={S.wrap}>
+{error && <div style={{...S.errorBox,marginBottom:16}}>{error}</div>}
+
+```
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>🧑‍🏫 Coach Info</h2>
+      <div style={S.row2}>
+        <Field label="Coach Name"><input value={fCoach} onChange={e=>setFCoach(e.target.value)} placeholder="Your name" style={S.input}/></Field>
+        <Field label="Location"><input value={fLocation} onChange={e=>setFLocation(e.target.value)} style={S.input}/></Field>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>📅 Session Info</h2>
+      <div style={S.row2}>
+        <Field label="Date"><input type="date" value={fDate} onChange={e=>setFDate(e.target.value)} style={S.input}/></Field>
+        <Field label="Session # This Week">
+          <select value={fSessionNum} onChange={e=>setFSessionNum(e.target.value)} style={S.input}>
+            <option value="1">1st of week</option><option value="2">2nd of week</option><option value="3">3rd of week</option>
+          </select>
+        </Field>
+      </div>
+      <div style={S.row2}>
+        <Field label="Training Phase">
+          <select value={fPhase} onChange={e=>setFPhase(e.target.value)} style={S.input}>
+            {trainingPhases.map(p=><option key={p}>{p}</option>)}
+          </select>
+        </Field>
+        <Field label="Days Until Next Game">
+          <select value={fDaysToGame} onChange={e=>setFDaysToGame(e.target.value)} style={S.input}>
+            <option value="1">1 day (eve of game)</option><option value="2">2 days</option><option value="3">3 days</option><option value="5">5+ days</option>
+          </select>
+        </Field>
+      </div>
+      <div style={S.row2}>
+        <Field label="Duration">
+          <select value={fDuration} onChange={e=>setFDuration(e.target.value)} style={S.input}>
+            <option value="60">60 min</option><option value="75">75 min</option><option value="90">90 min</option>
+          </select>
+        </Field>
+        <Field label="Session Topic (optional)">
+          <input value={fTopic} onChange={e=>setFTopic(e.target.value)} placeholder="e.g. Pressing from the front" style={S.input}/>
+        </Field>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>👥 Team Info</h2>
+      <div style={S.row2}>
+        <Field label="Age Group">
+          <select value={fAge} onChange={e=>setFAge(e.target.value)} style={S.input}>
+            {["U9","U10","U11","U12","U13","U14","U15","U16"].map(a=><option key={a}>{a}</option>)}
+          </select>
+        </Field>
+        <Field label="Number of Players">
+          <input type="number" value={fPlayers} onChange={e=>setFPlayers(e.target.value)} min="6" max="25" style={S.input}/>
+        </Field>
+      </div>
+      <div style={S.row2}>
+        <Field label="Formation">
+          <select value={fFormation} onChange={e=>setFFormation(e.target.value)} style={S.input}>
+            {formations.map(f=><option key={f}>{f}</option>)}
+          </select>
+        </Field>
+        <Field label="Skill Level">
+          <select value={fSkill} onChange={e=>setFSkill(e.target.value)} style={S.input}>
+            {skillLevels.map(s=><option key={s}>{s}</option>)}
+          </select>
+        </Field>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>🎯 Session Focus</h2>
+      <Field label="Primary Focus">
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>
+          {focusOptions.map(f => {
+            const fs = focusStyle[f.val]; const sel = fFocus===f.val;
+            return <button key={f.val} onClick={()=>setFFocus(f.val)} style={{padding:"7px 14px",borderRadius:99,fontSize:"0.82rem",fontWeight:600,cursor:"pointer",border:sel?`1.5px solid ${fs.border}`:"1.5px solid #e5e7eb",background:sel?fs.bg:"#f9fafb",color:sel?fs.color:"#6b7280",transition:"all 0.15s"}}>{f.emoji} {f.label}</button>;
+          })}
+        </div>
+      </Field>
+      <Field label="Drill Difficulty" style={{marginTop:12}}>
+        <div style={{display:"flex",gap:8,marginTop:4}}>
+          {diffOptions.map(d => { const sel=fDiff===d.val; return <button key={d.val} onClick={()=>setFDiff(d.val)} style={{padding:"7px 16px",borderRadius:99,fontSize:"0.82rem",fontWeight:600,cursor:"pointer",border:sel?"1.5px solid #1a472a":"1.5px solid #e5e7eb",background:sel?"#e6f4ea":"#f9fafb",color:sel?"#1a472a":"#6b7280"}}>{d.emoji} {d.val}</button>; })}
+        </div>
+      </Field>
+    </div>
+
+    <div style={S.card}>
+      <h2 style={S.cardTitle}>📝 Extra Notes <span style={{fontWeight:400,color:"#9ca3af",fontSize:"0.85rem"}}>(optional)</span></h2>
+      <textarea value={fNotes} onChange={e=>setFNotes(e.target.value)} placeholder="E.g. 'I'll be playing in the scrimmage', 'two GKs available', 'last session before tournament'..." style={{...S.input,minHeight:70,resize:"vertical",width:"100%"}}/>
+    </div>
+
+    <button onClick={generate} style={S.btnPrimary}>⚡ Generate Session Plan</button>
+  </div>
+</div>
+```
+
+);
+}
+
+function FormSection({ title, icon, children }) {
+return (
+<div style={{background:”#fff”,borderRadius:10,padding:“14px 18px”,marginBottom:12,boxShadow:“0 1px 4px rgba(0,0,0,0.07)”}}>
+<div style={{fontWeight:700,fontSize:“0.88rem”,color:”#111”,marginBottom:10,display:“flex”,alignItems:“center”,gap:8,borderBottom:“1px solid #f3f4f6”,paddingBottom:8}}>
+<span>{icon}</span>{title}
+</div>
+{children}
+</div>
+);
+}
+
+function Header({ savedCount, onSaved, onKey }) {
+return (
+<div style={{background:“linear-gradient(135deg,#111,#2d2d2d)”,color:”#fff”,padding:“16px 20px”,display:“flex”,justifyContent:“space-between”,alignItems:“center”}}>
+<div style={{display:“flex”,alignItems:“center”,gap:10}}>
+<span style={{fontSize:“1.4rem”}}>⚽</span>
+<div>
+<div style={{fontWeight:800,fontSize:“0.95rem”,letterSpacing:0.5}}>NEWRIVER UNITED</div>
+<div style={{fontSize:“0.68rem”,opacity:0.6,letterSpacing:1}}>SESSION PLANNER</div>
+</div>
+</div>
+<div style={{display:“flex”,gap:8}}>
+<button onClick={onSaved} style={S.headerBtn}>📂{savedCount>0?` ${savedCount}`:””}</button>
+<button onClick={onKey} style={S.headerBtn}>🔑</button>
+</div>
+</div>
+);
+}
+
+function Field({ label, children, style }) {
+return (
+<div style={{marginBottom:12,...style}}>
+<label style={{display:“block”,fontSize:“0.72rem”,fontWeight:700,color:”#6b7280”,marginBottom:5,textTransform:“uppercase”,letterSpacing:0.5}}>{label}</label>
+{children}
+</div>
+);
+}
+
+const shadow = “0 1px 4px rgba(0,0,0,0.08)”;
+const S = {
+page:      { minHeight:“100vh”, background:”#f3f4f6”, fontFamily:”‘Segoe UI’,sans-serif”, color:”#111” },
+wrap:      { maxWidth:660, margin:“0 auto”, padding:“20px 16px” },
+card:      { background:”#fff”, borderRadius:12, padding:20, boxShadow:shadow, marginBottom:16 },
+cardTitle: { fontSize:“0.92rem”, fontWeight:700, color:”#111”, marginBottom:14 },
+row2:      { display:“grid”, gridTemplateColumns:“1fr 1fr”, gap:12 },
+input:     { width:“100%”, padding:“10px 12px”, border:“1.5px solid #e5e7eb”, borderRadius:8, fontSize:“0.88rem”, fontFamily:“inherit”, background:”#f9fafb”, color:”#111” },
+btnPrimary:   { width:“100%”, padding:13, background:“linear-gradient(135deg,#111,#333)”, color:”#fff”, border:“none”, borderRadius:10, fontSize:“0.95rem”, fontWeight:700, cursor:“pointer”, display:“block” },
+btnSecondary: { padding:“9px 18px”, border:“2px solid #374151”, background:”#fff”, color:”#374151”, borderRadius:8, fontWeight:700, fontSize:“0.85rem”, cursor:“pointer” },
+headerBtn: { padding:“7px 12px”, background:“rgba(255,255,255,0.15)”, border:“1px solid rgba(255,255,255,0.2)”, borderRadius:8, color:”#fff”, cursor:“pointer”, fontSize:“0.85rem”, fontWeight:600 },
+badge:     { padding:“3px 10px”, borderRadius:99, fontSize:“0.75rem”, fontWeight:600, border:“1px solid transparent” },
+noteBox:   { background:”#fffbeb”, borderLeft:“4px solid #f59e0b”, borderRadius:8, padding:“12px 16px”, marginBottom:16, fontSize:“0.83rem”, color:”#78350f” },
+secTitle:  { fontSize:“0.68rem”, fontWeight:700, textTransform:“uppercase”, letterSpacing:1, color:”#9ca3af”, margin:“20px 0 10px” },
+tlItem:    { flex:1, minWidth:70, background:”#fff”, borderRadius:8, padding:“10px 6px”, textAlign:“center”, boxShadow:shadow },
+drillCard: { background:”#fff”, borderRadius:10, padding:“16px 18px”, marginBottom:12, boxShadow:shadow, borderLeft:“4px solid #48bb78” },
+timeBadge: { background:”#f3f4f6”, color:”#4b5563”, fontSize:“0.72rem”, fontWeight:700, padding:“3px 10px”, borderRadius:99, whiteSpace:“nowrap”, flexShrink:0 },
+cpBox:     { background:”#f0fdf4”, borderRadius:6, padding:“8px 12px”, marginBottom:10 },
+vlink:     { display:“inline-flex”, alignItems:“center”, gap:6, background:”#eff6ff”, color:”#1d4ed8”, padding:“5px 12px”, borderRadius:6, fontSize:“0.78rem”, fontWeight:600, textDecoration:“none” },
+errorBox:  { background:”#fef2f2”, borderLeft:“4px solid #f87171”, borderRadius:8, padding:“12px 16px”, fontSize:“0.83rem”, color:”#991b1b” },
+formText:  { fontSize:“0.84rem”, color:”#374151”, lineHeight:1.65, margin:0 },
+subLabel:  { fontSize:“0.72rem”, fontWeight:700, color:”#9ca3af”, textTransform:“uppercase”, letterSpacing:0.5, marginBottom:4 },
+spinner:   { width:44, height:44, border:“4px solid #e5e7eb”, borderTopColor:”#111”, borderRadius:“50%”, animation:“spin 0.8s linear infinite”, margin:“0 auto” },
+shadow,
+};
+
+const st = document.createElement(“style”);
+st.textContent = `@keyframes spin{to{transform:rotate(360deg)}} @media print{.no-print{display:none!important} body{background:#fff}}`;
+document.head.appendChild(st);
