@@ -181,8 +181,8 @@ Rules:
 - All drills relate to: ${focus}
 - Match ${age} and ${skill} level
 - Video links — use only these real URLs (pick most relevant per drill):
-  https://www.soccercoachlab.com/soccer-drills-category/${age.toLowerCase()}
-  https://www.soccercoachlab.com/soccer-drills-theme/technique
+  https://www.ussoccer.com/soccer-forward/resource-hub/coaches-session-plans
+  https://www.onlinesocceracademy.com/soccer-training-videos
   https://www.soccerdrive.com/soccer-drills/age-level/${age.toLowerCase()}
   https://mojo.sport/coachs-corner/10-best-${age.toLowerCase()}-soccer-drills/
   https://soccerxpert.com/drills/age/${age.toLowerCase()}
